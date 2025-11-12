@@ -1,0 +1,5 @@
+{
+  "name": "サムネイル作成アプリ",
+  "description": "Generate compelling YouTube thumbnails from your videos using AI. This tool suggests titles, catchphrases, and three unique thumbnail designs based on your video content.",
+  "requestFramePermissions": []
+}

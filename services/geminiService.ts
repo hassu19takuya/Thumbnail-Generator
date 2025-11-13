@@ -10,6 +10,39 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY! });
 
+const SYSTEM_INSTRUCTION = `【役割と目的】
+あなたは、YouTubeの視聴者のクリック率（CTR）を最大化し、かつ動画内容との整合性を保つプロフェッショナルなサムネイルデザイナーです。
+
+【アウトプット形式】
+以下のデザイン原則とテキスト要件を厳守した、スマホ画面での視認性を最優先した高解像度のサムネイル画像を生成してください。
+
+アスペクト比は 16:9 です。
+
+1. デザイン原則（画像の定義）
+以下の3つの制約に基づき、サムネイルのビジュアルを構成してください。
+
+A. 視認性とコントラスト
+- コントラスト極大化: 背景とメイン要素（人物、テキスト）の色相・明度・彩度の差を最大にしてください。特に文字は補色や白い太枠線で背景から浮き立たせてください。
+- 背景単純化: 背景は単色にするか、あるいはメイン要素を際立たせるために意図的に大きくボカしてください。
+- 焦点の集中: サムネイル内で最も伝えたいメインの被写体（製品、人物の顔、結果）を一つだけ選び、画面の60%以上を占めるように大きく配置してください。
+
+B. 視線誘導とレイアウト
+- 右側回避: 画面の**右下20%**のエリアには、重要なテキストや人物の顔などのメイン要素を配置しないでください。（YouTubeのタイムスタンプ回避のため）
+- 感情の強調: 人物が出演する場合、テーマに対する「驚き」「期待」「怒り」などの極端な感情を表情とジェスチャーでデフォルメして表現してください。
+
+2. テキスト要件（キャッチコピーの定義）
+サムネイル上のテキスト（キャッチコピー）は、以下の要件を満たし、視聴者の感情を強制的にトリガーするようにデザインしてください。
+
+- 文字数制限: 画面上に表示するキャッチコピーは、合計で最大13文字以内にしてください。
+- キラーフレーズ: テキストには「裏技」「禁止」「衝撃」「知らない」など、強い感情や緊急性を煽るパワーワードを必ず含めてください。
+- フォント: 視認性の高い太く、角がはっきりしたフォントを使用してください。
+- 色のハイライト: キャッチコピーの中で最も重要な1〜2単語のみ、他の文字色と明確に異なるハイライトカラー（例：メインが白なら黄色/赤）を使用してください。
+
+3. 整合性制約（タイトルとの連携）
+- 情報分割: キャッチコピーは、タイトルで説明される**具体的な内容の「問い」または「結論の断片」**を提示する役割に徹してください。タイトルと完全に同じ文言をサムネイルに配置しないでください。
+- 期待値一致: 煽り過ぎず、生成された画像が一目で動画の内容（ジャンル）を正しく伝えていることを確認してください。`;
+
+
 const titleSchema = {
     type: Type.OBJECT,
     properties: {
@@ -36,6 +69,7 @@ export const generateTitlesAndCatchphrases = async (context: string): Promise<{ 
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
+                systemInstruction: SYSTEM_INSTRUCTION,
                 responseMimeType: 'application/json',
                 responseSchema: titleSchema
             }
@@ -52,13 +86,15 @@ export const generateTitlesAndCatchphrases = async (context: string): Promise<{ 
 
 export const generateImageCandidatesFromPrompt = async (prompt: string): Promise<string[]> => {
     try {
+        const userPrompt = `テーマ「${prompt}」に基づいて、YouTubeサムネイル用の**背景画像**を生成してください。後からテキストを載せることを想定し、システム指示のデザイン原則に厳密に従ってください。特に「背景単純化」「焦点の集中」「右側回避」を重視してください。`;
         const imagePromises = Array(3).fill(null).map(() => 
             ai.models.generateContent({
                 model: 'gemini-2.5-flash-image',
                 contents: {
-                    parts: [{ text: `YouTubeのサムネイル用の背景画像を生成してください。テーマは「${prompt}」です。画像は高品質で、後から文字を載せやすいように、中心や主要な部分に余白がある構成にしてください。抽象的でも具象的でも構いません。` }]
+                    parts: [{ text: userPrompt }]
                 },
                 config: {
+                    systemInstruction: SYSTEM_INSTRUCTION,
                     responseModalities: [Modality.IMAGE],
                 },
             })
@@ -88,9 +124,9 @@ export const createFinalThumbnails = async (baseImage: string, title: string, ca
         const { base64, mimeType } = await urlContentToBase64(baseImage);
 
         const prompts = [
-            `この画像をベースに、以下のテキストを載せた魅力的なYouTubeサムネイルを作成してください。テキストは日本語で、読みやすく、目立つようにデザインしてください。スタイル：モダンで力強いフォント、白か黄色の文字に黒い縁取り。\n\nタイトル: 「${title}」\nキャッチコピー: 「${catchphrase}」`,
-            `この画像をベースに、以下のテキストを載せた魅力的なYouTubeサムネイルを作成してください。テキストは日本語で、遊び心のあるポップなデザインにしてください。スタイル：手書き風または丸ゴシック体、カラフルな配色。\n\nタイトル: 「${title}」\nキャッチコピー: 「${catchphrase}」`,
-            `この画像をベースに、以下のテキストを載せた魅力的なYouTubeサムネイルを作成してください。テキストは日本語で、クールで未来的なデザインにしてください。スタイル：ネオン風、サイバーパンク調のエフェクト。\n\nタイトル: 「${title}」\nキャッチコピー: 「${catchphrase}」`
+            `この画像をベースに、システム指示に厳密に従ったサムネイルを作成してください。テキストは日本語で、特に視認性とコントラストを最大化してください。\n\n動画タイトル（文脈用）: 「${title}」\nサムネイル用キャッチコピー: 「${catchphrase}」`,
+            `この画像をベースに、システム指示に厳密に従ったサムネイルを作成してください。特に「感情の強調」の原則を最大限に活用し、視聴者の感情を強く揺さぶるデザインにしてください。\n\n動画タイトル（文脈用）: 「${title}」\nサムネイル用キャッチコピー: 「${catchphrase}」`,
+            `この画像をベースに、システム指示に厳密に従ったサムネイルを作成してください。特に「色のハイライト」の原則を使い、キャッチコピー内のパワーワードが最も際立つデザインにしてください。\n\n動画タイトル（文脈用）: 「${title}」\nサムネイル用キャッチコピー: 「${catchphrase}」`
         ];
 
         const thumbnailPromises = prompts.map(prompt => 
@@ -103,6 +139,7 @@ export const createFinalThumbnails = async (baseImage: string, title: string, ca
                     ]
                 },
                 config: {
+                    systemInstruction: SYSTEM_INSTRUCTION,
                     responseModalities: [Modality.IMAGE],
                 },
             })
